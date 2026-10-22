@@ -1,0 +1,30 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px; color: #1f2933; background: #f3f5f8; }
+h1 { font-size: 22px; margin: 0 0 16px; }
+button { font: inherit; padding: 7px 14px; border-radius: 6px; border: 1px solid #c5cdd8; background: #fff; cursor: pointer; }
+button:hover { background: #eef2f7; }
+button.primary { background: #1e6fd9; border-color: #1e6fd9; color: #fff; }
+button.primary:hover { background: #185bb3; }
+button.danger { color: #c0392b; border-color: #e3b1ab; }
+button:disabled { opacity: .5; cursor: default; }
+input, select { font: inherit; padding: 7px 9px; border: 1px solid #c5cdd8; border-radius: 6px; background: #fff; }
+label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #52606d; }
+table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid #e4e8ee; vertical-align: middle; }
+th { background: #f8fafc; font-weight: 600; font-size: 13px; color: #52606d; }
+tr.selected td { background: #e8f1fd; }
+.toolbar { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 14px; }
+.actions { display: flex; gap: 6px; flex-wrap: nowrap; white-space: nowrap; }
+.error { color: #c0392b; background: #fdecea; border: 1px solid #f5c6c0; padding: 8px 12px; border-radius: 6px; margin: 8px 0; }
+.info { color: #1d5d9b; background: #e8f1fd; border: 1px solid #bcd6f7; padding: 8px 12px; border-radius: 6px; margin: 8px 0; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+.badge.free, .badge.active { background: #e3f6e8; color: #1e7b3a; }
+.badge.busy, .badge.pending { background: #fff3d6; color: #8a6100; }
+.badge.blocked, .badge.cancelled { background: #fdecea; color: #b03a2e; }
+.badge.moved { background: #ebe7fa; color: #5b3fb0; }
+.muted { color: #7b8794; }
+.overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, .35); display: flex; align-items: center; justify-content: center; z-index: 10; }
+.dialog { background: #fff; border-radius: 10px; padding: 22px; width: 460px; max-width: 95vw; box-shadow: 0 10px 30px rgba(0,0,0,.2); }
+.dialog h2 { font-size: 18px; margin: 0 0 14px; }
+.dialog .fields { display: grid; gap: 12px; }
+.dialog .footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }

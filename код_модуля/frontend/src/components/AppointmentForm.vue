@@ -43,7 +43,7 @@ const newPatient = reactive({ full_name: '', sport: '' })
 const specializations = ref([]); const doctors = ref([])
 const specialization = ref(null); const doctor = ref(null); const date = ref('')
 const freeSlots = ref([]); const slot = ref(null); const error = ref('')
-const doctorsOfSpec = computed(() => doctors.value.filter((d) => d.specialization === specialization.value))
+const doctorsOfSpec = computed(() => doctors.value.filter((d) => d.specializations.includes(specialization.value)))
 
 onMounted(async () => {
   const [specs, docs] = await Promise.all([api.get('specializations/'), api.get('doctors/')])
@@ -59,13 +59,15 @@ async function findPatient() {
 
 async function loadFreeSlots() {
   slot.value = null
+  if (!specialization.value) { freeSlots.value = []; return }
   const today = new Date().toISOString().slice(0, 10)
   const params = { status: 'free', date_from: date.value || today }
   if (date.value) params.date_to = date.value
   if (doctor.value) params.doctor = doctor.value
-  const ids = new Set(doctorsOfSpec.value.map((d) => d.id))
+  // слоты смен, в которых врач ведёт приём по выбранной специализации
+  params.specialization = specialization.value
   const { data } = await api.get('slots/', { params })
-  freeSlots.value = data.filter((s) => ids.has(s.doctor)).slice(0, 40)
+  freeSlots.value = data.slice(0, 40)
 }
 
 async function save() {

@@ -5,6 +5,7 @@ from rest_framework.test import APITestCase
 
 from accounts.models import User
 from appointments.models import Appointment, SmsNotification
+from directory.models import Specialization
 from schedule.models import Slot
 from tests.factories import future_day, make_admin, make_doctor, make_patient, make_room
 
@@ -73,6 +74,18 @@ class DirectoryApiTests(ApiTestCase):
         self.assertEqual(self.client.delete(f'/api/rooms/{room.pk}/').status_code, 409)
 
 
+    def test_doctor_from_account_with_several_specializations(self):
+        acc = User.objects.create(username='sokolova', full_name='Соколова Анна Николаевна', role=User.Role.DOCTOR)
+        specs = [Specialization.objects.create(name=n).pk for n in ('Кардиолог', 'Спортивный врач')]
+        r = self.client.post('/api/doctors/', {'account': acc.pk, 'specializations': specs}, format='json')
+        self.assertEqual(r.status_code, 201)
+        # ФИО врача берётся из учётной записи
+        self.assertEqual(r.data['full_name'], 'Соколова Анна Николаевна')
+        self.assertEqual(sorted(r.data['specialization_names']), ['Кардиолог', 'Спортивный врач'])
+        r = self.client.post('/api/doctors/', {'account': acc.pk, 'specializations': specs[:1]}, format='json')
+        self.assertEqual(r.status_code, 400)
+
+
 class ScheduleApiTests(ApiTestCase):
     def setUp(self):
         super().setUp()
@@ -94,6 +107,21 @@ class ScheduleApiTests(ApiTestCase):
         self.assertEqual(r.status_code, 409)
         self.assertIn('Врач уже работает', r.data['detail'])
 
+    def test_shift_requires_existing_doctor_specialization(self):
+        doctor = make_doctor('Смирнова Ольга Викторовна', spec=['Спортивный врач', 'Кардиолог'])
+        cardio = Specialization.objects.get(name='Кардиолог')
+        base = {'doctor': doctor.pk, 'room': self.room.pk, 'date': self.day, 'start_time': '09:00',
+                'end_time': '10:00', 'slot_minutes': 30}
+        # у врача две специализации – без указания специализации смена не создаётся
+        self.assertEqual(self.client.post('/api/shifts/', base, format='json').status_code, 400)
+        # пара «врач – специализация» должна существовать
+        r = self.client.post('/api/shifts/', {**base, 'doctor': self.doctor.pk, 'specialization': cardio.pk},
+                             format='json')
+        self.assertEqual(r.status_code, 400)
+        r = self.client.post('/api/shifts/', {**base, 'specialization': cardio.pk}, format='json')
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual((r.data['doctor'], r.data['specialization']), (doctor.pk, cardio.pk))
+
     def test_filter_by_doctor_and_dates(self):
         self.shift()
         r = self.client.get('/api/shifts/', {'doctor': self.doctor.pk, 'date_from': self.day, 'date_to': self.day})
@@ -110,7 +138,7 @@ class DoctorUnavailabilityFlowTests(ApiTestCase):
             self.client.post('/api/shifts/', {'doctor': doc.pk, 'room': room.pk, 'date': self.day, 'start_time': '09:00',
                                               'end_time': '11:00', 'slot_minutes': 30}, format='json')
         patient = make_patient()
-        slot = Slot.objects.filter(shift__doctor=petrov).first()
+        slot = Slot.objects.filter(shift__doctor_specialization__doctor=petrov).first()
         r = self.client.post('/api/appointments/', {'patient': patient.pk, 'slot': slot.pk}, format='json')
         self.assertEqual(r.status_code, 201)
         app_id = r.data['id']
@@ -127,13 +155,20 @@ class DoctorUnavailabilityFlowTests(ApiTestCase):
 
         r = self.client.post(f'/api/appointments/{app_id}/reschedule/', {'slot': proposals[0]['id']}, format='json')
         self.assertEqual(r.status_code, 200)
+        # переносится та же запись: меняется только слот, новая запись не создаётся
+        self.assertEqual(r.data['id'], app_id)
         self.assertEqual(r.data['status'], 'active')
-        self.assertEqual(Appointment.objects.get(pk=app_id).status, 'moved')
+        self.assertEqual(r.data['slot'], proposals[0]['id'])
+        self.assertEqual(Appointment.objects.count(), 1)
         self.assertEqual(SmsNotification.objects.count(), 1)
         self.assertEqual(self.client.get('/api/appointments/affected/').data, [])
 
-        r = self.client.post(f'/api/appointments/{app_id}/reschedule/', {'slot': proposals[1]['id']}, format='json')
+        # повторный перенос в занятый ею же слот отклоняется, в другой свободный – выполняется
+        r = self.client.post(f'/api/appointments/{app_id}/reschedule/', {'slot': proposals[0]['id']}, format='json')
         self.assertEqual(r.status_code, 409)
+        r = self.client.post(f'/api/appointments/{app_id}/reschedule/', {'slot': proposals[1]['id']}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(Slot.objects.get(pk=proposals[0]['id']).status, 'free')
 
     def test_new_patient_booking_and_cancel(self):
         doctor, room = make_doctor(), make_room()

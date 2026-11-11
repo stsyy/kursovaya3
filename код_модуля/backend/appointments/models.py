@@ -18,12 +18,12 @@ class Patient(models.Model):
 
 
 class Appointment(models.Model):
-    """Запись пациента на временной слот."""
+    """Запись пациента на временной слот. При переносе у записи меняется слот,
+    история переносов не хранится."""
 
     class Status(models.TextChoices):
-        PENDING = 'pending', 'ожидает кода из SMS'
+        PENDING = 'pending', 'ожидает подтверждения'
         ACTIVE = 'active', 'активна'
-        MOVED = 'moved', 'перенесена'
         CANCELLED = 'cancelled', 'отменена'
 
     class Channel(models.TextChoices):
@@ -38,8 +38,6 @@ class Appointment(models.Model):
     status = models.CharField('Статус', max_length=10, choices=Status.choices, default=Status.ACTIVE)
     channel = models.CharField('Способ записи', max_length=10, choices=Channel.choices, default=Channel.REGISTRY)
     created_at = models.DateTimeField('Дата создания', auto_now_add=True)
-    source = models.OneToOneField('self', on_delete=models.SET_NULL, null=True, blank=True,
-                                  related_name='rescheduled_to', verbose_name='Исходная запись')
 
     class Meta:
         verbose_name = 'запись пациента'

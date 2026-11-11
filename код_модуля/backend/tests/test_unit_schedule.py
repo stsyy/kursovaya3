@@ -1,4 +1,4 @@
-"""Модульные тесты расписания (процессы А3–А5)."""
+"""Модульные тесты расписания (процессы А3–А4)."""
 from datetime import time, timedelta
 
 from django.test import TestCase
@@ -6,7 +6,7 @@ from django.test import TestCase
 from schedule import services
 from schedule.models import Slot
 from appointments import services as app_services
-from tests.factories import future_day, make_doctor, make_patient, make_room, make_shift
+from tests.factories import doctor_specialization, future_day, make_doctor, make_patient, make_room, make_shift
 
 
 class SlotGenerationTests(TestCase):
@@ -51,7 +51,7 @@ class ConflictTests(TestCase):
 
     def test_create_shift_raises_on_conflict(self):
         with self.assertRaises(services.ScheduleError):
-            services.create_shift(self.doctor, self.room, self.day, time(11), time(12), 30)
+            services.create_shift(doctor_specialization(self.doctor), self.room, self.day, time(11), time(12), 30)
 
 
 class UnavailabilityTests(TestCase):
@@ -94,6 +94,18 @@ class UnavailabilityTests(TestCase):
         affected = services.delete_shift(self.shift)
         self.assertEqual(len(affected), 1)
         self.assertTrue(type(self.shift).objects.filter(pk=self.shift.pk).exists())
+
+    def test_hourly_period_blocks_only_overlapping_slots(self):
+        # период в часах: врач недоступен с 9:30 до 10:00 – блокируется только слот 9:30–10:00
+        period, affected = services.set_unavailability(self.doctor, 'other', self.day, self.day, time(9, 30), time(10))
+        self.assertEqual(affected, [])
+        blocked = list(self.shift.slots.filter(status=Slot.Status.BLOCKED).values_list('start_time', flat=True))
+        self.assertEqual(blocked, [time(9, 30)])
+        self.assertTrue(self.doctor.is_available(self.day))
+        with self.assertRaises(services.ScheduleError):
+            services.set_unavailability(self.doctor, 'illness', self.day, self.day)
+        services.remove_unavailability(period)
+        self.assertFalse(self.shift.slots.filter(status=Slot.Status.BLOCKED).exists())
 
     def test_update_shift_blocks_busy_slots_outside_new_time(self):
         affected = services.update_shift(self.shift, self.room, time(10), time(11))

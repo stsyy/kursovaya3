@@ -6,10 +6,8 @@
         <option v-for="d in doctors" :key="d.id" :value="d.id">{{ d.full_name }}</option></select></label>
       <label>Дата <input v-model="filters.date" type="date" /></label>
       <label>Статус <select v-model="filters.status"><option :value="null">Все</option>
-        <option value="active">активна</option><option value="pending">ожидает кода из SMS</option>
-        <option value="moved">перенесена</option><option value="cancelled">отменена</option></select></label>
-      <label>Способ записи <select v-model="filters.channel"><option :value="null">Все</option>
-        <option value="registry">регистратура</option><option value="online">форма онлайн-записи</option></select></label>
+        <option value="active">активна</option><option value="pending">ожидает подтверждения</option>
+        <option value="cancelled">отменена</option></select></label>
       <label>Телефон <input v-model.trim="filters.phone" placeholder="+7…" /></label>
       <button @click="applyFilter">Найти</button>
       <button class="primary" @click="showForm = true">Новая запись</button>
@@ -17,18 +15,17 @@
     <div v-if="error" class="error">{{ error }}</div>
     <div v-if="message" class="info">{{ message }}</div>
     <table>
-      <thead><tr><th>Дата</th><th>Время</th><th>Пациент</th><th>Телефон</th><th>Врач</th><th>Кабинет</th><th>Способ записи</th><th>Статус</th><th></th></tr></thead>
+      <thead><tr><th>Дата</th><th>Время</th><th>Пациент</th><th>Телефон</th><th>Врач</th><th>Кабинет</th><th>Статус</th><th></th></tr></thead>
       <tbody>
         <tr v-for="a in appointments" :key="a.id">
           <td>{{ fmtDate(a.date) }}</td><td>{{ fmtTime(a.start_time) }}</td><td>{{ a.patient_name }}</td>
           <td>{{ a.patient_phone }}</td><td>{{ a.doctor_name }}</td><td>{{ a.room_number }}</td>
-          <td>{{ a.channel_display }}</td>
           <td><span :class="['badge', a.status]">{{ a.status_display }}</span></td>
           <td v-if="a.status === 'active' || a.status === 'pending'"><div class="actions">
             <button @click="reschedule(a)">Перенести</button>
             <button class="danger" @click="toCancel = a">Отменить</button></div></td><td v-else></td>
         </tr>
-        <tr v-if="!appointments.length"><td colspan="9" class="muted">Записей не найдено</td></tr>
+        <tr v-if="!appointments.length"><td colspan="8" class="muted">Записей не найдено</td></tr>
       </tbody>
     </table>
     <AppointmentForm v-if="showForm" @saved="onSaved" @cancel="showForm = false" />
@@ -45,7 +42,7 @@ import AppointmentForm from '../components/AppointmentForm.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 
 const router = useRouter()
-const filters = reactive({ doctor: null, date: '', status: null, channel: null, phone: '' })
+const filters = reactive({ doctor: null, date: '', status: null, phone: '' })
 const appointments = ref([]); const doctors = ref([])
 const showForm = ref(false); const toCancel = ref(null); const error = ref(''); const message = ref('')
 

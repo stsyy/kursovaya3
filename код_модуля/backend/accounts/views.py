@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.db.models import ProtectedError
 from rest_framework import status, viewsets
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action, api_view, permission_classes
@@ -47,7 +48,12 @@ class AccountViewSet(viewsets.ModelViewSet):
         if services.account_has_active_appointments(user):
             return Response({'detail': 'У врача есть активные записи пациентов. Перенесите или отмените их.'},
                             status=status.HTTP_409_CONFLICT)
-        return super().destroy(request, *args, **kwargs)
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            # вместе с учётной записью удаляется врач; врача со сменами в расписании удалить нельзя
+            return Response({'detail': 'У врача есть смены в расписании. Сначала удалите их.'},
+                            status=status.HTTP_409_CONFLICT)
 
     @action(detail=True, methods=['post'])
     def block(self, request, pk=None):

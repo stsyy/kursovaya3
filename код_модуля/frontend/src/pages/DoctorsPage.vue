@@ -4,17 +4,17 @@
     <div class="toolbar"><button class="primary" @click="editing = {}">Добавить</button></div>
     <div v-if="error" class="error">{{ error }}</div>
     <table>
-      <thead><tr><th>ФИО</th><th>Специализация</th><th>Статус доступности</th><th></th></tr></thead>
+      <thead><tr><th>ФИО</th><th>Специализации</th><th>Статус доступности</th><th></th></tr></thead>
       <tbody>
         <tr v-for="d in doctors" :key="d.id">
-          <td>{{ d.full_name }}</td><td>{{ d.specialization_name }}</td>
+          <td>{{ d.full_name }}</td><td>{{ d.specialization_names.join(', ') }}</td>
           <td><span :class="['badge', d.availability_status === 'доступен' ? 'active' : 'blocked']">{{ d.availability_status }}</span></td>
           <td><div class="actions"><button @click="editing = d">Изменить</button>
             <button class="danger" @click="remove(d)">Удалить</button></div></td>
         </tr>
       </tbody>
     </table>
-    <DoctorForm v-if="editing" :doctor="editing" @saved="editing = null; load()" @cancel="editing = null" />
+    <DoctorForm v-if="editing" :doctor="editing" :doctors="doctors" @saved="editing = null; load()" @cancel="editing = null" />
   </section>
 </template>
 

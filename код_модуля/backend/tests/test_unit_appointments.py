@@ -1,4 +1,4 @@
-"""Модульные тесты работы с записями пациентов (процесс А6)."""
+"""Модульные тесты работы с записями пациентов (процесс А5)."""
 from datetime import timedelta
 
 from django.test import TestCase
@@ -39,7 +39,7 @@ class AppointmentServiceTests(TestCase):
             services.book(make_patient('+79140003344', 'Белова Дарья'), self.app.slot_id)
 
     def test_proposals_same_specialization_only(self):
-        doctors = {s.shift.doctor_id for s in services.propose_slots(self.app, limit=50)}
+        doctors = {s.shift.doctor_specialization.doctor_id for s in services.propose_slots(self.app, limit=50)}
         self.assertNotIn(self.kuznetsov.pk, doctors)
         self.assertIn(self.smirnova.pk, doctors)
 
@@ -52,16 +52,20 @@ class AppointmentServiceTests(TestCase):
         schedule_services.set_unavailability(self.petrov, 'illness', self.day, self.day)
         self.assertEqual(list(services.affected_appointments()), [self.app])
 
-    def test_reschedule_creates_new_and_sends_sms(self):
+    def test_reschedule_moves_same_appointment_and_sends_sms(self):
         schedule_services.set_unavailability(self.petrov, 'illness', self.day, self.day)
+        old_slot_id = self.app.slot_id
         target = services.propose_slots(self.app)[0]
-        new = services.reschedule(self.app.pk, target.pk)
+        moved = services.reschedule(self.app.pk, target.pk)
+        self.assertEqual(moved.pk, self.app.pk)
+        self.assertEqual(Appointment.objects.count(), 1)
         self.app.refresh_from_db()
-        self.assertEqual(self.app.status, Appointment.Status.MOVED)
-        self.assertEqual(new.source_id, self.app.pk)
+        self.assertEqual(self.app.status, Appointment.Status.ACTIVE)
+        self.assertEqual(self.app.slot_id, target.pk)
         self.assertEqual(Slot.objects.get(pk=target.pk).status, Slot.Status.BUSY)
-        self.assertEqual(Slot.objects.get(pk=self.app.slot_id).status, Slot.Status.BLOCKED)
-        self.assertEqual(SmsNotification.objects.filter(appointment=new, status='sent').count(), 1)
+        # исходный слот остаётся заблокированным: врач недоступен
+        self.assertEqual(Slot.objects.get(pk=old_slot_id).status, Slot.Status.BLOCKED)
+        self.assertEqual(SmsNotification.objects.filter(appointment=self.app, status='sent').count(), 1)
         self.assertEqual(ConsoleGateway.outbox[-1][0], self.patient.phone)
         self.assertEqual(list(services.affected_appointments()), [])
 
@@ -71,6 +75,12 @@ class AppointmentServiceTests(TestCase):
             services.reschedule(self.app.pk, other.slot_id)
         self.app.refresh_from_db()
         self.assertEqual(self.app.status, Appointment.Status.ACTIVE)
+
+    def test_reschedule_to_other_specialization_fails(self):
+        with self.assertRaises(services.AppointmentError):
+            services.reschedule(self.app.pk, self.s3.slots.first().pk)
+        self.app.refresh_from_db()
+        self.assertEqual(self.app.slot.shift_id, self.s1.pk)
 
     def test_cancel_frees_slot_and_notifies(self):
         services.cancel(self.app.pk)

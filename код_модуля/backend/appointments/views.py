@@ -27,9 +27,13 @@ class AppointmentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixin
     serializer_class = AppointmentSerializer
 
     def get_queryset(self):
-        qs = Appointment.objects.select_related('patient', 'slot__shift__doctor__specialization', 'slot__shift__room')
+        qs = Appointment.objects.select_related('patient', 'slot__shift__doctor_specialization__doctor__account',
+                                                'slot__shift__doctor_specialization__specialization',
+                                                'slot__shift__room')
         p = self.request.query_params
-        filters = {'doctor': 'slot__shift__doctor_id', 'date': 'slot__shift__date', 'status': 'status', 'channel': 'channel',
+        filters = {'doctor': 'slot__shift__doctor_specialization__doctor_id',
+                   'specialization': 'slot__shift__doctor_specialization__specialization_id',
+                   'date': 'slot__shift__date', 'status': 'status', 'channel': 'channel',
                    'date_from': 'slot__shift__date__gte', 'date_to': 'slot__shift__date__lte'}
         for param, field in filters.items():
             if p.get(param):
@@ -58,10 +62,10 @@ class AppointmentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixin
     @action(detail=True, methods=['post'])
     def reschedule(self, request, pk=None):
         try:
-            new = services.reschedule(self.get_object().pk, request.data.get('slot'))
+            app = services.reschedule(self.get_object().pk, request.data.get('slot'))
         except services.AppointmentError as e:
             return error(e)
-        return Response(AppointmentSerializer(new).data)
+        return Response(AppointmentSerializer(app).data)
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):

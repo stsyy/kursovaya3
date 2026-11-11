@@ -23,7 +23,7 @@
           <thead><tr><th>Дата и время</th><th>Врач</th><th>Кабинет</th><th></th></tr></thead>
           <tbody>
             <tr v-for="s in proposedSlots" :key="s.id">
-              <td>{{ fmtDate(s.date) }} {{ fmtTime(s.start_time) }}</td><td>{{ s.doctor_name }}</td><td>{{ s.room_number }}</td>
+              <td>{{ fmtDate(s.date) }} {{ fmtTime(s.start_time) }}</td><td>{{ s.doctor_name }}<br><span class="muted">{{ s.specialization_name }}</span></td><td>{{ s.room_number }}</td>
               <td><button class="primary" @click="confirmMove(current, s)">Перенести</button></td>
             </tr>
             <tr v-if="!proposedSlots.length"><td colspan="4" class="muted">Свободных слотов врачей той же специализации нет</td></tr>

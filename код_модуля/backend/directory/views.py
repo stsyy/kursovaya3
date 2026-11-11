@@ -18,20 +18,21 @@ class ProtectedDeleteMixin:
             return Response({'detail': self.protected_message}, status=status.HTTP_409_CONFLICT)
 
 
-class SpecializationViewSet(viewsets.ModelViewSet):
+class SpecializationViewSet(ProtectedDeleteMixin, viewsets.ModelViewSet):
     queryset = Specialization.objects.all()
     serializer_class = SpecializationSerializer
+    protected_message = 'Специализация указана у врачей и не может быть удалена.'
 
 
 class DoctorViewSet(ProtectedDeleteMixin, viewsets.ModelViewSet):
-    queryset = Doctor.objects.select_related('specialization')
+    queryset = Doctor.objects.select_related('account').prefetch_related('specializations')
     serializer_class = DoctorSerializer
     protected_message = 'У врача есть смены в расписании. Сначала удалите или перенесите их.'
 
     def get_queryset(self):
         qs = super().get_queryset()
         spec = self.request.query_params.get('specialization')
-        return qs.filter(specialization_id=spec) if spec else qs
+        return qs.filter(specializations=spec) if spec else qs
 
 
 class RoomViewSet(ProtectedDeleteMixin, viewsets.ModelViewSet):

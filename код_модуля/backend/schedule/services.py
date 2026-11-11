@@ -1,8 +1,9 @@
-"""Бизнес-логика расписания: процессы А3 «Формировать сетку расписания»,
-А4 «Корректировать расписание» и А5 «Управлять статусом доступности врача»."""
+"""Бизнес-логика расписания: процессы А3 «Формировать сетку расписания»
+и А4 «Корректировать расписание» (в том числе учёт отсутствия врача)."""
 from datetime import datetime, timedelta
 
 from django.db import transaction
+from django.db.models import Q
 
 from .models import Shift, Slot, UnavailabilityPeriod
 
@@ -18,7 +19,8 @@ def _overlap(qs, start, end):
 
 
 def check_conflicts(doctor, room, date, start, end, exclude=None):
-    """Проверка конфликтов смен (вариант использования «Проверить конфликты расписания»)."""
+    """Проверка конфликтов смен (вариант использования «Проверить конфликты расписания»).
+    Пересечение смен врача проверяется по всем его специализациям."""
     errors = []
     if start >= end:
         errors.append('Время начала смены должно быть раньше времени окончания.')
@@ -26,13 +28,17 @@ def check_conflicts(doctor, room, date, start, end, exclude=None):
     same_day = Shift.objects.filter(date=date)
     if exclude is not None:
         same_day = same_day.exclude(pk=exclude.pk)
-    for s in _overlap(same_day.filter(doctor=doctor), start, end):
+    for s in _overlap(same_day.filter(doctor_specialization__doctor=doctor), start, end):
         errors.append(f'Врач уже работает {s.date:%d.%m.%Y} с {s.start_time:%H:%M} до {s.end_time:%H:%M} '
                       f'в кабинете {s.room.number}.')
     for s in _overlap(same_day.filter(room=room), start, end):
         errors.append(f'Кабинет {room.number} занят врачом {s.doctor} с {s.start_time:%H:%M} до {s.end_time:%H:%M}.')
-    if UnavailabilityPeriod.objects.filter(doctor=doctor, date_from__lte=date, date_to__gte=date).exists():
+    periods = UnavailabilityPeriod.objects.filter(doctor=doctor, date_from__lte=date, date_to__gte=date)
+    if periods.filter(time_from__isnull=True).exists():
         errors.append('На эту дату у врача установлен период недоступности.')
+    for p in periods.filter(time_from__lt=end, time_to__gt=start):
+        errors.append(f'На эту дату у врача установлен период недоступности '
+                      f'с {p.time_from:%H:%M} до {p.time_to:%H:%M}.')
     return errors
 
 
@@ -47,15 +53,15 @@ def slot_bounds(date, start, end, minutes):
 
 
 @transaction.atomic
-def create_shift(doctor, room, date, start_time, end_time, slot_minutes):
-    """Создаёт смену и формирует её слоты со статусом «свободен»."""
+def create_shift(doctor_specialization, room, date, start_time, end_time, slot_minutes):
+    """Создаёт смену врача по одной из его специализаций и формирует её слоты со статусом «свободен»."""
     if slot_minutes <= 0:
         raise ScheduleError('Длительность слота должна быть больше нуля.')
-    errors = check_conflicts(doctor, room, date, start_time, end_time)
+    errors = check_conflicts(doctor_specialization.doctor, room, date, start_time, end_time)
     if errors:
         raise ScheduleError(errors)
-    shift = Shift.objects.create(doctor=doctor, room=room, date=date, start_time=start_time,
-                                 end_time=end_time, slot_minutes=slot_minutes)
+    shift = Shift.objects.create(doctor_specialization=doctor_specialization, room=room, date=date,
+                                 start_time=start_time, end_time=end_time, slot_minutes=slot_minutes)
     Slot.objects.bulk_create(Slot(shift=shift, start_time=a, end_time=b)
                              for a, b in slot_bounds(date, start_time, end_time, slot_minutes))
     return shift
@@ -64,7 +70,7 @@ def create_shift(doctor, room, date, start_time, end_time, slot_minutes):
 def _active_on(slots):
     from appointments.models import Appointment
     return Appointment.objects.filter(slot__in=slots, status__in=Appointment.ACTUAL).select_related(
-        'patient', 'slot__shift__doctor')
+        'patient', 'slot__shift__doctor_specialization__doctor__account')
 
 
 @transaction.atomic
@@ -106,23 +112,49 @@ def block_slot(slot):
     return list(_active_on([slot]))
 
 
-def doctor_slots(doctor, date_from, date_to):
-    return Slot.objects.filter(shift__doctor=doctor, shift__date__gte=date_from, shift__date__lte=date_to)
+def doctor_slots(doctor, date_from, date_to, time_from=None, time_to=None):
+    """Слоты врача (по всем его специализациям) в заданные дни. Если задано время,
+    отбираются только слоты, пересекающиеся с интервалом time_from–time_to в каждый из дней."""
+    slots = Slot.objects.filter(shift__doctor_specialization__doctor=doctor, shift__date__gte=date_from,
+                                shift__date__lte=date_to)
+    if time_from is not None:
+        slots = _overlap(slots, time_from, time_to)
+    return slots
+
+
+def period_slots(period, date_from=None, date_to=None):
+    """Слоты, которые закрывает период недоступности (целые дни или часы внутри дней)."""
+    return doctor_slots(period.doctor, date_from or period.date_from, date_to or period.date_to,
+                        period.time_from, period.time_to)
+
+
+def _overlapping_periods(doctor, date_from, date_to, time_from, time_to):
+    """Периоды врача, пересекающиеся с новым: по датам и, если оба периода заданы в часах, по времени."""
+    qs = UnavailabilityPeriod.objects.filter(doctor=doctor, date_from__lte=date_to, date_to__gte=date_from)
+    if time_from is None:
+        return qs
+    return qs.filter(Q(time_from__isnull=True) | Q(time_from__lt=time_to, time_to__gt=time_from))
 
 
 @transaction.atomic
-def set_unavailability(doctor, reason, date_from, date_to):
-    """Устанавливает период недоступности, блокирует слоты врача внутри периода и
-    возвращает (период, список затронутых записей)."""
+def set_unavailability(doctor, reason, date_from, date_to, time_from=None, time_to=None):
+    """Устанавливает период недоступности врача на целые дни (время не задано) или на часы
+    внутри дней (задано время начала и окончания), блокирует слоты врача, попадающие в период,
+    и возвращает (период, список затронутых записей)."""
     errors = []
     if date_from > date_to:
         errors.append('Дата начала периода не может быть позже даты окончания.')
-    elif UnavailabilityPeriod.objects.filter(doctor=doctor, date_from__lte=date_to, date_to__gte=date_from).exists():
+    elif (time_from is None) != (time_to is None):
+        errors.append('Укажите и время начала, и время окончания периода или не указывайте время совсем.')
+    elif time_from is not None and time_from >= time_to:
+        errors.append('Время начала периода должно быть раньше времени окончания.')
+    elif _overlapping_periods(doctor, date_from, date_to, time_from, time_to).exists():
         errors.append('Период пересекается с уже установленным периодом недоступности врача.')
     if errors:
         raise ScheduleError(errors)
-    period = UnavailabilityPeriod.objects.create(doctor=doctor, reason=reason, date_from=date_from, date_to=date_to)
-    slots = doctor_slots(doctor, date_from, date_to)
+    period = UnavailabilityPeriod.objects.create(doctor=doctor, reason=reason, date_from=date_from, date_to=date_to,
+                                                 time_from=time_from, time_to=time_to)
+    slots = period_slots(period)
     affected = list(_active_on(slots))
     slots.update(status=Slot.Status.BLOCKED)
     return period, affected
@@ -147,9 +179,9 @@ def change_unavailability_end(period, new_date_to):
     period.date_to = new_date_to
     period.save(update_fields=['date_to'])
     if new_date_to < old_to:
-        _release(doctor_slots(period.doctor, new_date_to + timedelta(days=1), old_to))
+        _release(period_slots(period, new_date_to + timedelta(days=1), old_to))
         return []
-    slots = doctor_slots(period.doctor, old_to + timedelta(days=1), new_date_to)
+    slots = period_slots(period, old_to + timedelta(days=1), new_date_to)
     affected = list(_active_on(slots))
     slots.update(status=Slot.Status.BLOCKED)
     return affected
@@ -157,5 +189,5 @@ def change_unavailability_end(period, new_date_to):
 
 @transaction.atomic
 def remove_unavailability(period):
-    _release(doctor_slots(period.doctor, period.date_from, period.date_to))
+    _release(period_slots(period))
     period.delete()

@@ -61,7 +61,7 @@ def account_has_active_appointments(user):
     if doctor is None:
         return False
     return Appointment.objects.filter(
-        slot__shift__doctor=doctor,
+        slot__shift__doctor_specialization__doctor=doctor,
         status__in=[Appointment.Status.ACTIVE, Appointment.Status.PENDING],
         slot__shift__date__gte=timezone.localdate(),
     ).exists()

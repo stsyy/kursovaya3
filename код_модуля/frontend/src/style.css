@@ -21,7 +21,6 @@ tr.selected td { background: #e8f1fd; }
 .badge.free, .badge.active { background: #e3f6e8; color: #1e7b3a; }
 .badge.busy, .badge.pending { background: #fff3d6; color: #8a6100; }
 .badge.blocked, .badge.cancelled { background: #fdecea; color: #b03a2e; }
-.badge.moved { background: #ebe7fa; color: #5b3fb0; }
 .muted { color: #7b8794; }
 .overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, .35); display: flex; align-items: center; justify-content: center; z-index: 10; }
 .dialog { background: #fff; border-radius: 10px; padding: 22px; width: 460px; max-width: 95vw; box-shadow: 0 10px 30px rgba(0,0,0,.2); }

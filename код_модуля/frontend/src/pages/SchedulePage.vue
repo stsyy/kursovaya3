@@ -19,10 +19,10 @@
     <p class="legend"><span class="badge free">свободен</span> <span class="badge busy">занят</span>
       <span class="badge blocked">заблокирован</span> <span class="muted">— нажмите на свободный или занятый слот, чтобы заблокировать его</span></p>
     <table>
-      <thead><tr><th>Дата</th><th>Врач</th><th>Кабинет</th><th>Время</th><th>Слоты</th><th></th></tr></thead>
+      <thead><tr><th>Дата</th><th>Врач</th><th>Специализация</th><th>Кабинет</th><th>Время</th><th>Слоты</th><th></th></tr></thead>
       <tbody>
         <tr v-for="s in shifts" :key="s.id">
-          <td>{{ fmtDate(s.date) }}</td><td>{{ s.doctor_name }}</td><td>{{ s.room_number }}</td>
+          <td>{{ fmtDate(s.date) }}</td><td>{{ s.doctor_name }}</td><td>{{ s.specialization_name }}</td><td>{{ s.room_number }}</td>
           <td>{{ fmtTime(s.start_time) }}–{{ fmtTime(s.end_time) }}</td>
           <td class="slots">
             <span v-for="sl in s.slots" :key="sl.id" :class="['badge', 'slot', sl.status]" :title="sl.status_display"
@@ -31,7 +31,7 @@
           <td><div class="actions"><button @click="editShift(s)">Изменить</button>
             <button class="danger" @click="deleteShift(s)">Удалить</button></div></td>
         </tr>
-        <tr v-if="!shifts.length"><td colspan="6" class="muted">Смен за выбранный период нет</td></tr>
+        <tr v-if="!shifts.length"><td colspan="7" class="muted">Смен за выбранный период нет</td></tr>
       </tbody>
     </table>
     <ShiftForm v-if="editing" :shift="editing" :doctors="doctors" :rooms="rooms"

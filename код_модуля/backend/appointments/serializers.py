@@ -22,7 +22,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
     date = serializers.DateField(source='slot.shift.date', read_only=True)
     start_time = serializers.TimeField(source='slot.start_time', read_only=True)
     doctor_name = serializers.CharField(source='slot.shift.doctor.full_name', read_only=True)
-    specialization = serializers.CharField(source='slot.shift.doctor.specialization.name', read_only=True)
+    specialization = serializers.CharField(source='slot.shift.specialization.name', read_only=True)
     room_number = serializers.CharField(source='slot.shift.room.number', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     channel_display = serializers.CharField(source='get_channel_display', read_only=True)
@@ -30,8 +30,8 @@ class AppointmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Appointment
         fields = ['id', 'patient', 'patient_name', 'patient_phone', 'slot', 'date', 'start_time', 'doctor_name',
-                  'specialization', 'room_number', 'status', 'status_display', 'channel', 'channel_display', 'created_at', 'source']
-        read_only_fields = ['status', 'channel', 'created_at', 'source']
+                  'specialization', 'room_number', 'status', 'status_display', 'channel', 'channel_display', 'created_at']
+        read_only_fields = ['status', 'channel', 'created_at']
         # занятость слота проверяет сервис book() с блокировкой строки слота
         validators = []
 

@@ -17,7 +17,8 @@ def with_affected(data, affected):
 
 
 def filter_by_period(qs, params, prefix=''):
-    for param, field in (('doctor', 'doctor_id'), ('room', 'room_id'),
+    for param, field in (('doctor', 'doctor_specialization__doctor_id'),
+                         ('specialization', 'doctor_specialization__specialization_id'), ('room', 'room_id'),
                          ('date_from', 'date__gte'), ('date_to', 'date__lte')):
         if params.get(param):
             qs = qs.filter(**{prefix + field: params[param]})
@@ -28,7 +29,10 @@ class ShiftViewSet(viewsets.ModelViewSet):
     serializer_class = ShiftSerializer
 
     def get_queryset(self):
-        qs = Shift.objects.select_related('doctor', 'room').prefetch_related('slots')
+        qs = (Shift.objects.select_related('doctor_specialization__doctor__account',
+                                           'doctor_specialization__specialization', 'room')
+              .prefetch_related('slots__shift__doctor_specialization__doctor__account',
+                                'slots__shift__doctor_specialization__specialization', 'slots__shift__room'))
         return filter_by_period(qs, self.request.query_params)
 
     def create(self, request, *args, **kwargs):
@@ -65,7 +69,8 @@ class SlotViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = SlotSerializer
 
     def get_queryset(self):
-        qs = Slot.objects.select_related('shift__doctor', 'shift__room')
+        qs = Slot.objects.select_related('shift__doctor_specialization__doctor__account',
+                                         'shift__doctor_specialization__specialization', 'shift__room')
         qs = filter_by_period(qs, self.request.query_params, prefix='shift__')
         if self.request.query_params.get('status'):
             qs = qs.filter(status=self.request.query_params['status'])
@@ -83,7 +88,7 @@ class PeriodViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cre
     serializer_class = PeriodSerializer
 
     def get_queryset(self):
-        qs = UnavailabilityPeriod.objects.select_related('doctor')
+        qs = UnavailabilityPeriod.objects.select_related('doctor__account')
         doctor = self.request.query_params.get('doctor')
         return qs.filter(doctor_id=doctor) if doctor else qs
 

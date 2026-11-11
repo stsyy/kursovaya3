@@ -71,7 +71,9 @@ class ScheduleUiTests(UiTestCase):
         self.page.click('text=Создать смену')
         d = self.page.locator('.dialog')
         d.locator('select').nth(0).select_option(label=self.doctor.full_name)
-        d.locator('select').nth(1).select_option(index=0)
+        # у врача одна специализация – она выбирается в форме автоматически (select nth(1))
+        expect(d.locator('select').nth(1)).to_have_value(str(self.doctor.specializations.get().pk))
+        d.locator('select').nth(2).select_option(index=0)
         d.locator('input[type=date]').fill(str(self.day))
         d.locator('input[type=time]').nth(0).fill(start)
         d.locator('input[type=time]').nth(1).fill(end)
@@ -113,8 +115,12 @@ class RescheduleUiTests(UiTestCase):
         expect(self.page.locator('tr.selected')).to_contain_text(self.patient.full_name)
         self.page.locator('text=Перенести').first.click()
         expect(self.page.locator('[data-test=move-result]')).to_contain_text('SMS-уведомление отправлено')
+        old_slot_id = self.app.slot_id
         self.app.refresh_from_db()
-        self.assertEqual(self.app.status, Appointment.Status.MOVED)
+        # перенесена та же запись: она осталась активной и получила новый слот
+        self.assertEqual(self.app.status, Appointment.Status.ACTIVE)
+        self.assertNotEqual(self.app.slot_id, old_slot_id)
+        self.assertEqual(Appointment.objects.count(), 1)
 
     def test_cancel_from_appointments(self):
         self.page.click('nav >> text=Записи пациентов')
